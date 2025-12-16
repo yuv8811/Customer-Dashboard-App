@@ -1,26 +1,95 @@
 import { Page, Layout, Card, Text, Button, Box, BlockStack, List, Badge, Divider } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import { useSubmit, useLoaderData, redirect } from "react-router";
+
 
 export const loader = async ({ request }) => {
-    const { admin } = await authenticate.admin(request)
+    const { admin } = await authenticate.admin(request);
+
     const response = await admin.graphql(
         `#graphql
-        mutation{
-            billingAgreementCreate(
-                input: {
-                    name: "Customer Dashboard"
-                    plan: "basic"
-                }
-            ) {
-                billingAgreement {
-                    id
+        query {
+            app {
+                installation {
+                    activeSubscriptions {
+                        name
+                        test
+                    }
                 }
             }
-        }
-        `
+        }`
     );
+
+    const data = await response.json();
+    const activeSubscriptions = data.data.app.installation.activeSubscriptions;
+    // Default to "Basic" if no active subscription
+    const currentPlan = activeSubscriptions.length > 0 ? activeSubscriptions[0].name : "Basic";
+
+    return { currentPlan };
+};
+
+export const action = async ({ request }) => {
+    const { admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const plan = formData.get("plan");
+    const price = formData.get("price");
+
+    const response = await admin.graphql(
+        `#graphql
+        mutation AppSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
+            appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
+                userErrors {
+                    field
+                    message
+                }
+                appSubscription {
+                    id
+                }
+                confirmationUrl
+            }
+        }`,
+        {
+            variables: {
+                name: plan,
+                returnUrl: `https://${new URL(request.url).host}/app`,
+                lineItems: [
+                    {
+                        plan: {
+                            appRecurringPricingDetails: {
+                                price: { amount: price, currencyCode: "USD" },
+                                interval: "EVERY_30_DAYS",
+                            },
+                        },
+                    },
+                ],
+                test: true,
+            },
+        }
+    );
+
+    const responseJson = await response.json();
+    const { userErrors, confirmationUrl } = responseJson.data.appSubscriptionCreate;
+
+    if (userErrors.length > 0) {
+        console.error("Subscription errors:", userErrors);
+        return { errors: userErrors };
+    }
+
+    if (!confirmationUrl) {
+        console.error("No confirmation URL returned");
+        return { error: "Failed to create subscription" };
+    }
+
+    return redirect(confirmationUrl);
 };
 export default function Pricing() {
+    const { currentPlan } = useLoaderData();
+    const submit = useSubmit();
+
+    const handleUpgrade = (plan, price) => {
+        submit({ plan, price }, { method: "POST" });
+    };
+
     return (
         <Page
             title="Pricing Plans"
@@ -50,7 +119,9 @@ export default function Pricing() {
                                     </List>
                                 </BlockStack>
 
-                                <Button fullWidth>Current Plan</Button>
+                                <Button fullWidth disabled={currentPlan === "Basic"}>
+                                    {currentPlan === "Basic" ? "Current Plan" : "Downgrade to Basic"}
+                                </Button>
                             </BlockStack>
                         </Box>
                     </Card>
@@ -84,7 +155,14 @@ export default function Pricing() {
                                         </List>
                                     </BlockStack>
 
-                                    <Button fullWidth variant="primary">Upgrade to Grow</Button>
+                                    <Button
+                                        fullWidth
+                                        variant="primary"
+                                        onClick={() => handleUpgrade("Grow", "19")}
+                                        disabled={currentPlan === "Grow"}
+                                    >
+                                        {currentPlan === "Grow" ? "Current Plan" : "Upgrade to Grow"}
+                                    </Button>
                                 </BlockStack>
                             </Box>
                         </Card>
@@ -115,7 +193,13 @@ export default function Pricing() {
                                     </List>
                                 </BlockStack>
 
-                                <Button fullWidth>Upgrade to Advance</Button>
+                                <Button
+                                    fullWidth
+                                    onClick={() => handleUpgrade("Advance", "49")}
+                                    disabled={currentPlan === "Advance"}
+                                >
+                                    {currentPlan === "Advance" ? "Current Plan" : "Upgrade to Advance"}
+                                </Button>
                             </BlockStack>
                         </Box>
                     </Card>

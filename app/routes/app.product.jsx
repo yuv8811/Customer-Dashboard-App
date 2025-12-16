@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { Image } from "@shopify/polaris";
 import { useLoaderData } from "react-router";
 import {
     Page,
@@ -29,7 +30,6 @@ export const loader = async ({ request }) => {
             title
             status
             vendor
-            createdAt
             descriptionHtml
             totalInventory
             images(first: 1) {
@@ -82,6 +82,7 @@ export default function Product() {
                     const variant = product.variants.edges[0]?.node;
                     const price = variant?.price || "0.00";
                     const sku = variant?.sku || "N/A";
+                    const inventory = product.totalInventory || "N/A";
 
                     return (
                         <Layout.Section key={product.id} variant="oneThird">
@@ -121,6 +122,11 @@ export default function Product() {
                                                 ${price}
                                             </Text>
                                         </InlineStack>
+                                        <InlineStack align="space-between">
+                                            <Text variant="bodyMd" fontWeight="bold">
+                                                Inventory: {inventory}
+                                            </Text>
+                                        </InlineStack>
                                     </BlockStack>
 
                                     <Button fullWidth variant="primary" onClick={() => handleOpenModal(product)}>
@@ -133,56 +139,49 @@ export default function Product() {
                 })}
             </Layout>
 
-            <Modal
-                open={active}
+            <Modal open={active}
                 onClose={handleCloseModal}
                 title={selectedProduct?.title}
-                primaryAction={{
-                    content: 'Close',
-                    onAction: handleCloseModal,
-                }}
-                secondaryActions={[
-                    {
-                        content: 'View in Admin',
-                        url: selectedProduct ? `shopify:admin/products/${selectedProduct.id.split('/').pop()}` : '',
-                        external: true
-                    }
-                ]}
+                size="small"
             >
                 <Modal.Section>
                     {selectedProduct && (
                         <BlockStack gap="400">
-                            <InlineStack align="start" gap="400">
-                                <Thumbnail
-                                    source={selectedProduct.images.edges[0]?.node?.url || ImageIcon}
-                                    alt={selectedProduct.images.edges[0]?.node?.altText || selectedProduct.title}
-                                    size="large"
+                            <InlineStack align="center" gap="400">
+
+                                <Image
+                                    source={selectedProduct.images.edges[0]?.node?.url}
+                                    alt={selectedProduct.title}
+                                    width={200}
+                                    height={200}
                                 />
+
                                 <BlockStack gap="200">
-                                    <Text variant="headinglg" as="h2">${selectedProduct.variants.edges[0]?.node?.price}</Text>
-                                    <Box>
+                                    <Text alignment="center" variant="headinglg" as="h2">${selectedProduct.variants.edges[0]?.node?.price}</Text>
+                                    <Box align="center">
                                         <Badge tone={selectedProduct.status === 'ACTIVE' ? 'success' : 'info'}>
                                             {selectedProduct.status}
                                         </Badge>
                                     </Box>
-                                    <Text variant="bodyMd" tone="subdued">Vendor: {selectedProduct.vendor}</Text>
-                                    <Text variant="bodyMd" tone="subdued">Inventory: {selectedProduct.totalInventory} in stock</Text>
-                                    <Text variant="bodyMd" tone="subdued">Created: {new Date(selectedProduct.createdAt).toLocaleDateString()}</Text>
+                                    <Text alignment="center" variant="bodyMd" tone="subdued">Vendor: {selectedProduct.vendor}</Text>
+                                    <Text alignment="center" variant="bodyMd" tone="subdued">Inventory: {selectedProduct.totalInventory} in stock</Text>
+                                    <Text alignment="center" variant="bodyMd" tone="subdued">Description: {selectedProduct.descriptionHtml || 'No description available.'} </Text>
                                 </BlockStack>
                             </InlineStack>
-
-                            <Box paddingBlockStart="200">
-                                <Text variant="headingSm" as="h5">Description</Text>
-                                <Box paddingBlockStart="200">
-                                    <Scrollable shadow style={{ maxHeight: '200px' }}>
-                                        <div dangerouslySetInnerHTML={{ __html: selectedProduct.descriptionHtml || '<p>No description available.</p>' }} />
-                                    </Scrollable>
-                                </Box>
+                            <Box align="center">
+                                <Button
+                                    url={`shopify:admin/products/${selectedProduct.id.split('/').pop()}`}
+                                    selectedProduct:true
+                                    variant="primary"
+                                    size="large"
+                                >
+                                    View in admin
+                                </Button>
                             </Box>
                         </BlockStack>
                     )}
                 </Modal.Section>
             </Modal>
-        </Page>
+        </Page >
     );
 }
